@@ -42,7 +42,7 @@ def test_parse_instance_limit_with_purpose_and_model():
             },
         }
     )
-    by_name = {l.name: l for l in limits}
+    by_name = {limit.name: limit for limit in limits}
     assert by_name["gpt5-pro-cap"].model_id == "gpt-5-pro"
     assert by_name["enrichments-cap"].scope == "instance"
     assert by_name["enrichments-cap"].purpose == "enrichments"
@@ -97,6 +97,7 @@ def test_missing_required_field_rejected():
 
 
 # --- matching ---
+
 
 def _limit(**kwargs):
     base = dict(

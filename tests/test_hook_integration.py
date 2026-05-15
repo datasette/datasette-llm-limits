@@ -22,9 +22,9 @@ async def test_plugin_registers_a_limits_accountant():
         else:
             accountants.append(result)
 
-    assert any(isinstance(a, LimitsAccountant) for a in accountants), (
-        f"Expected a LimitsAccountant among {accountants!r}"
-    )
+    assert any(
+        isinstance(a, LimitsAccountant) for a in accountants
+    ), f"Expected a LimitsAccountant among {accountants!r}"
     # All registered accountants must subclass Accountant
     for a in accountants:
         assert isinstance(a, Accountant)

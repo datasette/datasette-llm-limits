@@ -9,7 +9,6 @@ from datasette_llm_accountant import Nanocents
 
 from .windows import ALL_WINDOWS
 
-
 VALID_SCOPES = {"actor", "instance"}
 REQUIRED_FIELDS = {"scope", "window", "amount_usd"}
 OPTIONAL_FIELDS = {"purpose", "model_id"}
@@ -52,11 +51,15 @@ def parse_limits(raw: Optional[dict]) -> list[Limit]:
 
 def _parse_one(name: str, spec: dict) -> Limit:
     if not isinstance(spec, dict):
-        raise ValueError(f"limit {name!r}: expected a mapping, got {type(spec).__name__}")
+        raise ValueError(
+            f"limit {name!r}: expected a mapping, got {type(spec).__name__}"
+        )
     keys = set(spec)
     missing = REQUIRED_FIELDS - keys
     if missing:
-        raise ValueError(f"limit {name!r}: missing required field(s): {sorted(missing)}")
+        raise ValueError(
+            f"limit {name!r}: missing required field(s): {sorted(missing)}"
+        )
     unknown = keys - ALL_FIELDS
     if unknown:
         raise ValueError(f"limit {name!r}: unknown field(s): {sorted(unknown)}")

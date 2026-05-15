@@ -4,7 +4,6 @@ import pytest
 
 from datasette_llm_limits.windows import window_start, window_reset
 
-
 UTC = timezone.utc
 
 

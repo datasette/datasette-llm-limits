@@ -18,7 +18,9 @@ async def test_reserve_returns_tx_and_inserts_row(make_datasette):
     assert isinstance(tx, Tx)
 
     internal = datasette.get_internal_database()
-    rows = list(await internal.execute("select * from llm_limits_tx where id = ?", [tx]))
+    rows = list(
+        await internal.execute("select * from llm_limits_tx where id = ?", [tx])
+    )
     assert len(rows) == 1
     row = rows[0]
     assert row["actor_id"] == "alice"
@@ -32,7 +34,9 @@ async def test_reserve_returns_tx_and_inserts_row(make_datasette):
 @pytest.mark.asyncio
 async def test_reserve_over_cap_raises_insufficient_balance(make_datasette):
     _, accountant = await make_datasette(
-        limits={"tight": {"scope": "actor", "window": "rolling-24h", "amount_usd": 0.50}}
+        limits={
+            "tight": {"scope": "actor", "window": "rolling-24h", "amount_usd": 0.50}
+        }
     )
     await accountant.reserve(usd(0.40), actor_id="alice")
     with pytest.raises(InsufficientBalanceError) as exc_info:
@@ -49,7 +53,9 @@ async def test_reserve_over_cap_raises_insufficient_balance(make_datasette):
 @pytest.mark.asyncio
 async def test_reserve_under_cap_succeeds_repeatedly(make_datasette):
     _, accountant = await make_datasette(
-        limits={"daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}}
+        limits={
+            "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}
+        }
     )
     for _ in range(5):
         await accountant.reserve(usd(0.10), actor_id="alice")
@@ -58,7 +64,9 @@ async def test_reserve_under_cap_succeeds_repeatedly(make_datasette):
 @pytest.mark.asyncio
 async def test_settle_updates_settled_columns(make_datasette):
     datasette, accountant = await make_datasette(
-        limits={"daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}}
+        limits={
+            "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}
+        }
     )
     tx = await accountant.reserve(usd(0.50), actor_id="alice")
     await accountant.settle(tx, usd(0.30), actor_id="alice")
@@ -75,7 +83,9 @@ async def test_settle_updates_settled_columns(make_datasette):
 async def test_settling_under_reservation_frees_headroom(make_datasette):
     """Reserve $0.80 of $1 cap; settle for $0.10 → another $0.80 fits."""
     _, accountant = await make_datasette(
-        limits={"daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}}
+        limits={
+            "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}
+        }
     )
     tx = await accountant.reserve(usd(0.80), actor_id="alice")
     await accountant.settle(tx, usd(0.10), actor_id="alice")
@@ -86,7 +96,9 @@ async def test_settling_under_reservation_frees_headroom(make_datasette):
 @pytest.mark.asyncio
 async def test_rollback_zeros_out_the_reservation(make_datasette):
     _, accountant = await make_datasette(
-        limits={"daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}}
+        limits={
+            "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}
+        }
     )
     tx = await accountant.reserve(usd(0.90), actor_id="alice")
     await accountant.rollback(tx)
@@ -97,7 +109,9 @@ async def test_rollback_zeros_out_the_reservation(make_datasette):
 @pytest.mark.asyncio
 async def test_per_actor_isolation(make_datasette):
     _, accountant = await make_datasette(
-        limits={"daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}}
+        limits={
+            "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}
+        }
     )
     await accountant.reserve(usd(0.90), actor_id="alice")
     # Bob's quota is independent
@@ -111,7 +125,11 @@ async def test_per_actor_isolation(make_datasette):
 async def test_anonymous_caller_bypasses_actor_scope_only(make_datasette):
     _, accountant = await make_datasette(
         limits={
-            "actor-daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 0.50},
+            "actor-daily": {
+                "scope": "actor",
+                "window": "rolling-24h",
+                "amount_usd": 0.50,
+            },
             "instance-daily": {
                 "scope": "instance",
                 "window": "rolling-24h",
@@ -208,7 +226,9 @@ async def test_calendar_window_error_includes_reset_time(make_datasette):
 @pytest.mark.asyncio
 async def test_rolling_window_error_omits_reset_time(make_datasette):
     _, accountant = await make_datasette(
-        limits={"daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 0.10}}
+        limits={
+            "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 0.10}
+        }
     )
     await accountant.reserve(usd(0.10), actor_id="alice")
     with pytest.raises(InsufficientBalanceError) as exc_info:
