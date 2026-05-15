@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS llm_limits_tx (
     id TEXT PRIMARY KEY,

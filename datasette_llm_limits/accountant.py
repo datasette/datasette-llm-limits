@@ -44,9 +44,9 @@ class LimitsAccountant(Accountant):
 
     def _matching_limits(self, *, model_id, purpose, actor_id) -> list[Limit]:
         return [
-            l
-            for l in self._limits()
-            if l.matches(model_id=model_id, purpose=purpose, actor_id=actor_id)
+            limit
+            for limit in self._limits()
+            if limit.matches(model_id=model_id, purpose=purpose, actor_id=actor_id)
         ]
 
     def _running_total(self, conn, limit: Limit, *, model_id, purpose, actor_id, now):
@@ -126,7 +126,7 @@ class LimitsAccountant(Accountant):
                         purpose,
                         model_id,
                         int(nanocents),
-                        json.dumps([l.name for l in matching]),
+                        json.dumps([limit.name for limit in matching]),
                     ],
                 )
                 conn.execute("COMMIT")

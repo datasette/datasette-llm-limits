@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-
 ROLLING_WINDOWS = {
     "rolling-24h": timedelta(hours=24),
     "rolling-7d": timedelta(days=7),

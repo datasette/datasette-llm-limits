@@ -10,9 +10,7 @@ from conftest import usd
 def _config(limits=None, allow_view_to=None):
     cfg = {"plugins": {"datasette-llm-limits": {"limits": limits or {}}}}
     if allow_view_to is not None:
-        cfg["permissions"] = {
-            "datasette-llm-limits-view": {"id": allow_view_to}
-        }
+        cfg["permissions"] = {"datasette-llm-limits-view": {"id": allow_view_to}}
     return cfg
 
 
@@ -47,11 +45,13 @@ async def test_authorized_user_gets_html():
 async def test_authorized_user_gets_json():
     limits = {
         "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00},
-        "monthly": {"scope": "instance", "window": "calendar-month", "amount_usd": 50.0},
+        "monthly": {
+            "scope": "instance",
+            "window": "calendar-month",
+            "amount_usd": 50.0,
+        },
     }
-    datasette = Datasette(
-        memory=True, config=_config(limits=limits, allow_view_to="*")
-    )
+    datasette = Datasette(memory=True, config=_config(limits=limits, allow_view_to="*"))
     await datasette.invoke_startup()
 
     # Record one reservation so the running totals are not all zero.
@@ -59,19 +59,17 @@ async def test_authorized_user_gets_json():
     await accountant.reserve(usd(0.20), actor_id="alice", model_id="gpt-4o")
 
     cookies = {"ds_actor": datasette.client.actor_cookie({"id": "alice"})}
-    resp = await datasette.client.get(
-        "/-/llm-limits?_format=json", cookies=cookies
-    )
+    resp = await datasette.client.get("/-/llm-limits?_format=json", cookies=cookies)
     assert resp.status_code == 200
     body = resp.json()
     assert "limits" in body
     assert "recent_transactions" in body
 
-    names = {l["name"] for l in body["limits"]}
+    names = {row["name"] for row in body["limits"]}
     assert names == {"daily", "monthly"}
 
     # The instance limit aggregates the $0.20 reservation
-    monthly = next(l for l in body["limits"] if l["name"] == "monthly")
+    monthly = next(row for row in body["limits"] if row["name"] == "monthly")
     assert monthly["used_usd"] == pytest.approx(0.20)
     assert monthly["amount_usd"] == pytest.approx(50.0)
     assert monthly["remaining_usd"] == pytest.approx(49.80)
@@ -87,11 +85,13 @@ async def test_authorized_user_gets_json():
 @pytest.mark.asyncio
 async def test_html_view_lists_configured_limits():
     limits = {
-        "monthly": {"scope": "instance", "window": "calendar-month", "amount_usd": 50.0},
+        "monthly": {
+            "scope": "instance",
+            "window": "calendar-month",
+            "amount_usd": 50.0,
+        },
     }
-    datasette = Datasette(
-        memory=True, config=_config(limits=limits, allow_view_to="*")
-    )
+    datasette = Datasette(memory=True, config=_config(limits=limits, allow_view_to="*"))
     await datasette.invoke_startup()
     cookies = {"ds_actor": datasette.client.actor_cookie({"id": "alice"})}
     resp = await datasette.client.get("/-/llm-limits", cookies=cookies)

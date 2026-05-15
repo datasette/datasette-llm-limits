@@ -24,8 +24,7 @@ async def test_llm_limits_tx_has_expected_columns():
     await datasette.invoke_startup()
     internal = datasette.get_internal_database()
     cols = {
-        r["name"]: r
-        for r in await internal.execute("pragma table_info(llm_limits_tx)")
+        r["name"]: r for r in await internal.execute("pragma table_info(llm_limits_tx)")
     }
     assert set(cols) >= {
         "id",

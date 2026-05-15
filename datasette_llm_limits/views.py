@@ -9,10 +9,8 @@ from datetime import datetime, timezone
 from datasette.utils.asgi import Forbidden, Response
 from datasette_llm_accountant import Nanocents
 
-from .accountant import LimitsAccountant
 from .config import Limit, parse_limits
 from .windows import window_reset, window_start
-
 
 _RECENT_LIMIT = 50
 
@@ -38,9 +36,9 @@ async def _running_total_for_limit(internal_db, limit: Limit, now: datetime) -> 
           AND (:limit_model_id IS NULL OR model_id = :limit_model_id)
     """
     params = {
-        "window_start": window_start(limit.window, now).isoformat(
-            timespec="seconds"
-        ).replace("+00:00", "Z"),
+        "window_start": window_start(limit.window, now)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
         "limit_purpose": limit.purpose,
         "limit_model_id": limit.model_id,
     }
@@ -108,17 +106,17 @@ def _render_html(payload: dict) -> str:
 
     limit_rows = "".join(
         "<tr>"
-        f"<td>{esc(l['name'])}</td>"
-        f"<td>{esc(l['scope'])}</td>"
-        f"<td>{esc(l['window'])}</td>"
-        f"<td>{esc(l['purpose'])}</td>"
-        f"<td>{esc(l['model_id'])}</td>"
-        f"<td>${l['amount_usd']:.4f}</td>"
-        f"<td>${l['used_usd']:.4f}</td>"
-        f"<td>${l['remaining_usd']:.4f}</td>"
-        f"<td>{esc(l['resets_at'])}</td>"
+        f"<td>{esc(row['name'])}</td>"
+        f"<td>{esc(row['scope'])}</td>"
+        f"<td>{esc(row['window'])}</td>"
+        f"<td>{esc(row['purpose'])}</td>"
+        f"<td>{esc(row['model_id'])}</td>"
+        f"<td>${row['amount_usd']:.4f}</td>"
+        f"<td>${row['used_usd']:.4f}</td>"
+        f"<td>${row['remaining_usd']:.4f}</td>"
+        f"<td>{esc(row['resets_at'])}</td>"
         "</tr>"
-        for l in payload["limits"]
+        for row in payload["limits"]
     )
 
     def _settled_cell(value):
@@ -165,9 +163,7 @@ th, td {{ border: 1px solid #ccc; padding: 4px 8px; text-align: left; }}
 
 async def llm_limits_view(request, datasette):
     actor = request.actor
-    if not await datasette.allowed(
-        action="datasette-llm-limits-view", actor=actor
-    ):
+    if not await datasette.allowed(action="datasette-llm-limits-view", actor=actor):
         raise Forbidden("datasette-llm-limits-view")
 
     raw = (datasette.plugin_config("datasette-llm-limits") or {}).get("limits") or {}
