@@ -6,6 +6,9 @@ from .config import parse_limits
 from .storage import ensure_schema
 from .views import llm_limits_view
 
+VIEW_PERMISSION = "datasette-llm-limits-view"
+VIEW_PATH = "/-/llm-limits"
+
 
 def _config_limits(datasette):
     raw = (datasette.plugin_config("datasette-llm-limits") or {}).get("limits") or {}
@@ -31,7 +34,7 @@ def register_llm_accountants(datasette):
 def register_actions():
     return [
         Action(
-            name="datasette-llm-limits-view",
+            name=VIEW_PERMISSION,
             abbr="dlv",
             description="View the LLM limits inspection page",
         ),
@@ -39,5 +42,17 @@ def register_actions():
 
 
 @hookimpl
+async def menu_links(datasette, actor, request):
+    if await datasette.allowed(action=VIEW_PERMISSION, actor=actor):
+        return [
+            {
+                "href": datasette.urls.path(VIEW_PATH),
+                "label": "LLM Limits",
+            }
+        ]
+    return []
+
+
+@hookimpl
 def register_routes():
-    return [(r"^/-/llm-limits$", llm_limits_view)]
+    return [(r"^{}$".format(VIEW_PATH), llm_limits_view)]

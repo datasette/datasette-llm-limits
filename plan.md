@@ -261,8 +261,10 @@ permissions:
 Registered via `register_routes`. Returns HTML by default and JSON when
 called with `?_format=json` or `Accept: application/json`. Renders:
 
-- A table of configured limits with current running total, remaining
-  headroom, and time-until-reset.
+- A table of configured limits. Instance-scoped limits include current running
+  total, remaining headroom, and time-until-reset; actor-scoped limits mark
+  those amounts as per-actor and show current usage in a separate actor usage
+  table.
 - The 50 most recent transactions, with links to query the underlying
   `_internal.llm_limits_tx` table (visible to actors with
   `view-database` on `_internal`).

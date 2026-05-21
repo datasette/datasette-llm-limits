@@ -119,8 +119,10 @@ Try again after 2026-04-01T00:00:00Z.
 ## The `/-/llm-limits` inspection view
 
 The plugin registers a read-only view at `/-/llm-limits` that lists every
-configured limit alongside its current usage, remaining headroom, and the time
-of the next reset (for calendar windows), plus the 50 most recent transactions.
+configured limit. Instance-scoped limits include their current usage, remaining
+headroom, and the time of the next reset (for calendar windows). Actor-scoped
+limits show their cap as a per-actor cap, with usage broken out in a separate
+actor usage table. The view also shows the 50 most recent transactions.
 
 The view supports both HTML (default) and JSON:
 

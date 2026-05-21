@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}LLM Limits{% endblock %}
+
+{% block extra_head %}
+<style>
+.llm-limits-table {
+  border-collapse: collapse;
+  margin-bottom: 2em;
+}
+.llm-limits-table th,
+.llm-limits-table td {
+  border: 1px solid #ccc;
+  padding: 4px 8px;
+  text-align: left;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>LLM Limits</h1>
+
+<h2>Configured limits</h2>
+<table class="llm-limits-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Scope</th>
+      <th>Window</th>
+      <th>Purpose</th>
+      <th>Model</th>
+      <th>Cap</th>
+      <th>Used</th>
+      <th>Remaining</th>
+      <th>Resets at</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in limits %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td>{{ row.scope }}</td>
+        <td>{{ row.window }}</td>
+        <td>{{ row.purpose or "" }}</td>
+        <td>{{ row.model_id or "" }}</td>
+        <td>{{ "$%.4f"|format(row.amount_usd) }}</td>
+        <td>{% if row.used_usd is none %}per actor{% else %}{{ "$%.4f"|format(row.used_usd) }}{% endif %}</td>
+        <td>{% if row.remaining_usd is none %}per actor{% else %}{{ "$%.4f"|format(row.remaining_usd) }}{% endif %}</td>
+        <td>{{ row.resets_at or "" }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9"><em>No limits configured</em></td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Actor usage</h2>
+<table class="llm-limits-table">
+  <thead>
+    <tr>
+      <th>Limit</th>
+      <th>Actor</th>
+      <th>Window</th>
+      <th>Purpose</th>
+      <th>Model</th>
+      <th>Cap</th>
+      <th>Used</th>
+      <th>Remaining</th>
+      <th>Resets at</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in actor_usage %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td>{{ row.actor_id }}</td>
+        <td>{{ row.window }}</td>
+        <td>{{ row.purpose or "" }}</td>
+        <td>{{ row.model_id or "" }}</td>
+        <td>{{ "$%.4f"|format(row.amount_usd) }}</td>
+        <td>{{ "$%.4f"|format(row.used_usd) }}</td>
+        <td>{{ "$%.4f"|format(row.remaining_usd) }}</td>
+        <td>{{ row.resets_at or "" }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9"><em>No actor-scoped usage yet</em></td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Recent transactions</h2>
+<table class="llm-limits-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Created</th>
+      <th>Actor</th>
+      <th>Purpose</th>
+      <th>Model</th>
+      <th>Reserved</th>
+      <th>Settled</th>
+      <th>Matched limits</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in recent_transactions %}
+      <tr>
+        <td>{{ t.id }}</td>
+        <td>{{ t.created_at }}</td>
+        <td>{{ t.actor_id or "" }}</td>
+        <td>{{ t.purpose or "" }}</td>
+        <td>{{ t.model_id or "" }}</td>
+        <td>{{ "$%.4f"|format(t.reserved_usd) }}</td>
+        <td>{% if t.settled_usd is not none %}{{ "$%.4f"|format(t.settled_usd) }}{% endif %}</td>
+        <td>{{ t.matched_limits|join(", ") }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8"><em>No transactions yet</em></td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

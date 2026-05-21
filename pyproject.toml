@@ -41,3 +41,5 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.uv]
 prerelease = "allow"
 
+[tool.setuptools.package-data]
+datasette_llm_limits = ["templates/*.html"]

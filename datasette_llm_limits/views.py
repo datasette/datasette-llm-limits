@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 import json
 from datetime import datetime, timezone
 
@@ -46,14 +45,55 @@ async def _running_total_for_limit(internal_db, limit: Limit, now: datetime) -> 
     return rows[0]["total"] or 0
 
 
+async def _actor_usage_for_limit(
+    internal_db, limit: Limit, now: datetime
+) -> list[dict]:
+    sql = """
+        SELECT actor_id, COALESCE(SUM(
+            CASE WHEN settled_at IS NULL
+                 THEN reserved_nanocents
+                 ELSE settled_nanocents
+            END
+        ), 0) AS total
+        FROM llm_limits_tx
+        WHERE created_at >= :window_start
+          AND actor_id IS NOT NULL
+          AND (:limit_purpose IS NULL OR purpose = :limit_purpose)
+          AND (:limit_model_id IS NULL OR model_id = :limit_model_id)
+        GROUP BY actor_id
+        ORDER BY total DESC, actor_id
+    """
+    params = {
+        "window_start": window_start(limit.window, now)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+        "limit_purpose": limit.purpose,
+        "limit_model_id": limit.model_id,
+    }
+    return [
+        {
+            "actor_id": row["actor_id"],
+            "used_nanocents": row["total"] or 0,
+        }
+        for row in await internal_db.execute(sql, params)
+    ]
+
+
 async def _build_payload(datasette, limits: list[Limit]) -> dict:
     now = datetime.now(timezone.utc)
     internal = datasette.get_internal_database()
 
     limit_rows = []
+    actor_usage_rows = []
     for limit in limits:
-        used = await _running_total_for_limit(internal, limit, now)
-        remaining = max(limit.amount_nanocents - used, 0)
+        if limit.scope == "instance":
+            used = await _running_total_for_limit(internal, limit, now)
+            remaining = max(limit.amount_nanocents - used, 0)
+            used_usd = Nanocents(used).to_usd()
+            remaining_usd = Nanocents(remaining).to_usd()
+        else:
+            used_usd = None
+            remaining_usd = None
         reset = window_reset(limit.window, now)
         limit_rows.append(
             {
@@ -63,11 +103,28 @@ async def _build_payload(datasette, limits: list[Limit]) -> dict:
                 "purpose": limit.purpose,
                 "model_id": limit.model_id,
                 "amount_usd": Nanocents(limit.amount_nanocents).to_usd(),
-                "used_usd": Nanocents(used).to_usd(),
-                "remaining_usd": Nanocents(remaining).to_usd(),
+                "used_usd": used_usd,
+                "remaining_usd": remaining_usd,
                 "resets_at": reset.isoformat() if reset else None,
             }
         )
+        if limit.scope == "actor":
+            for usage in await _actor_usage_for_limit(internal, limit, now):
+                used = usage["used_nanocents"]
+                remaining = max(limit.amount_nanocents - used, 0)
+                actor_usage_rows.append(
+                    {
+                        "name": limit.name,
+                        "actor_id": usage["actor_id"],
+                        "window": limit.window,
+                        "purpose": limit.purpose,
+                        "model_id": limit.model_id,
+                        "amount_usd": Nanocents(limit.amount_nanocents).to_usd(),
+                        "used_usd": Nanocents(used).to_usd(),
+                        "remaining_usd": Nanocents(remaining).to_usd(),
+                        "resets_at": reset.isoformat() if reset else None,
+                    }
+                )
 
     tx_rows = []
     for row in await internal.execute(
@@ -97,68 +154,11 @@ async def _build_payload(datasette, limits: list[Limit]) -> dict:
             }
         )
 
-    return {"limits": limit_rows, "recent_transactions": tx_rows}
-
-
-def _render_html(payload: dict) -> str:
-    def esc(value):
-        return html.escape("" if value is None else str(value))
-
-    limit_rows = "".join(
-        "<tr>"
-        f"<td>{esc(row['name'])}</td>"
-        f"<td>{esc(row['scope'])}</td>"
-        f"<td>{esc(row['window'])}</td>"
-        f"<td>{esc(row['purpose'])}</td>"
-        f"<td>{esc(row['model_id'])}</td>"
-        f"<td>${row['amount_usd']:.4f}</td>"
-        f"<td>${row['used_usd']:.4f}</td>"
-        f"<td>${row['remaining_usd']:.4f}</td>"
-        f"<td>{esc(row['resets_at'])}</td>"
-        "</tr>"
-        for row in payload["limits"]
-    )
-
-    def _settled_cell(value):
-        if value is None:
-            return ""
-        return f"${value:.4f}"
-
-    tx_rows = "".join(
-        "<tr>"
-        f"<td>{esc(t['id'])}</td>"
-        f"<td>{esc(t['created_at'])}</td>"
-        f"<td>{esc(t['actor_id'])}</td>"
-        f"<td>{esc(t['purpose'])}</td>"
-        f"<td>{esc(t['model_id'])}</td>"
-        f"<td>${t['reserved_usd']:.4f}</td>"
-        f"<td>{_settled_cell(t['settled_usd'])}</td>"
-        f"<td>{esc(', '.join(t['matched_limits']))}</td>"
-        "</tr>"
-        for t in payload["recent_transactions"]
-    )
-
-    return f"""<!doctype html>
-<html><head><title>LLM Limits</title>
-<style>
-body {{ font-family: sans-serif; margin: 2em; }}
-table {{ border-collapse: collapse; margin-bottom: 2em; }}
-th, td {{ border: 1px solid #ccc; padding: 4px 8px; text-align: left; }}
-</style>
-</head><body>
-<h1>LLM Limits</h1>
-<h2>Configured limits</h2>
-<table><thead><tr>
-<th>Name</th><th>Scope</th><th>Window</th><th>Purpose</th><th>Model</th>
-<th>Cap</th><th>Used</th><th>Remaining</th><th>Resets at</th>
-</tr></thead><tbody>{limit_rows or '<tr><td colspan="9"><em>No limits configured</em></td></tr>'}</tbody></table>
-<h2>Recent transactions</h2>
-<table><thead><tr>
-<th>ID</th><th>Created</th><th>Actor</th><th>Purpose</th><th>Model</th>
-<th>Reserved</th><th>Settled</th><th>Matched limits</th>
-</tr></thead><tbody>{tx_rows or '<tr><td colspan="8"><em>No transactions yet</em></td></tr>'}</tbody></table>
-</body></html>
-"""
+    return {
+        "limits": limit_rows,
+        "actor_usage": actor_usage_rows,
+        "recent_transactions": tx_rows,
+    }
 
 
 async def llm_limits_view(request, datasette):
@@ -172,4 +172,11 @@ async def llm_limits_view(request, datasette):
 
     if _wants_json(request):
         return Response.json(payload)
-    return Response.html(_render_html(payload))
+    return Response.html(
+        await datasette.render_template(
+            "llm_limits.html",
+            payload,
+            request=request,
+            view_name="llm_limits",
+        )
+    )

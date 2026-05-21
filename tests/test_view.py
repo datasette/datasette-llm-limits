@@ -42,6 +42,26 @@ async def test_authorized_user_gets_html():
 
 
 @pytest.mark.asyncio
+async def test_menu_link_visible_to_authorized_user():
+    datasette = Datasette(memory=True, config=_config(allow_view_to="*"))
+    await datasette.invoke_startup()
+    cookies = {"ds_actor": datasette.client.actor_cookie({"id": "alice"})}
+    resp = await datasette.client.get("/", cookies=cookies)
+    assert resp.status_code == 200
+    assert '<a href="/-/llm-limits">LLM Limits</a>' in resp.text
+
+
+@pytest.mark.asyncio
+async def test_menu_link_hidden_from_unauthorized_user():
+    datasette = Datasette(memory=True, config=_config(allow_view_to="admin"))
+    await datasette.invoke_startup()
+    cookies = {"ds_actor": datasette.client.actor_cookie({"id": "alice"})}
+    resp = await datasette.client.get("/", cookies=cookies)
+    assert resp.status_code == 200
+    assert '<a href="/-/llm-limits">LLM Limits</a>' not in resp.text
+
+
+@pytest.mark.asyncio
 async def test_authorized_user_gets_json():
     limits = {
         "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00},
@@ -63,10 +83,16 @@ async def test_authorized_user_gets_json():
     assert resp.status_code == 200
     body = resp.json()
     assert "limits" in body
+    assert "actor_usage" in body
     assert "recent_transactions" in body
 
     names = {row["name"] for row in body["limits"]}
     assert names == {"daily", "monthly"}
+
+    # Actor-scoped limit rows do not have a single global used/remaining amount.
+    daily = next(row for row in body["limits"] if row["name"] == "daily")
+    assert daily["used_usd"] is None
+    assert daily["remaining_usd"] is None
 
     # The instance limit aggregates the $0.20 reservation
     monthly = next(row for row in body["limits"] if row["name"] == "monthly")
@@ -80,6 +106,45 @@ async def test_authorized_user_gets_json():
     assert tx["actor_id"] == "alice"
     assert tx["model_id"] == "gpt-4o"
     assert tx["reserved_usd"] == pytest.approx(0.20)
+
+
+@pytest.mark.asyncio
+async def test_actor_scoped_usage_is_reported_per_actor():
+    limits = {
+        "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00},
+        "monthly": {
+            "scope": "instance",
+            "window": "calendar-month",
+            "amount_usd": 50.0,
+        },
+    }
+    datasette = Datasette(memory=True, config=_config(limits=limits, allow_view_to="*"))
+    await datasette.invoke_startup()
+
+    accountant = LimitsAccountant(datasette)
+    await accountant.reserve(usd(0.20), actor_id="alice")
+    await accountant.reserve(usd(0.30), actor_id="bob")
+
+    cookies = {"ds_actor": datasette.client.actor_cookie({"id": "alice"})}
+    resp = await datasette.client.get("/-/llm-limits?_format=json", cookies=cookies)
+    assert resp.status_code == 200
+    body = resp.json()
+
+    daily = next(row for row in body["limits"] if row["name"] == "daily")
+    assert daily["used_usd"] is None
+    assert daily["remaining_usd"] is None
+
+    usage_by_actor = {row["actor_id"]: row for row in body["actor_usage"]}
+    assert set(usage_by_actor) == {"alice", "bob"}
+    assert usage_by_actor["alice"]["name"] == "daily"
+    assert usage_by_actor["alice"]["used_usd"] == pytest.approx(0.20)
+    assert usage_by_actor["alice"]["remaining_usd"] == pytest.approx(0.80)
+    assert usage_by_actor["bob"]["used_usd"] == pytest.approx(0.30)
+    assert usage_by_actor["bob"]["remaining_usd"] == pytest.approx(0.70)
+
+    monthly = next(row for row in body["limits"] if row["name"] == "monthly")
+    assert monthly["used_usd"] == pytest.approx(0.50)
+    assert monthly["remaining_usd"] == pytest.approx(49.50)
 
 
 @pytest.mark.asyncio
@@ -98,3 +163,23 @@ async def test_html_view_lists_configured_limits():
     assert resp.status_code == 200
     assert "monthly" in resp.text
     assert "calendar-month" in resp.text
+    assert 'Powered by <a href="https://datasette.io/"' in resp.text
+
+
+@pytest.mark.asyncio
+async def test_html_view_marks_actor_limit_usage_as_per_actor():
+    limits = {
+        "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00},
+    }
+    datasette = Datasette(memory=True, config=_config(limits=limits, allow_view_to="*"))
+    await datasette.invoke_startup()
+    accountant = LimitsAccountant(datasette)
+    await accountant.reserve(usd(0.20), actor_id="alice")
+
+    cookies = {"ds_actor": datasette.client.actor_cookie({"id": "alice"})}
+    resp = await datasette.client.get("/-/llm-limits", cookies=cookies)
+    assert resp.status_code == 200
+    assert "per actor" in resp.text
+    assert "Actor usage" in resp.text
+    assert "alice" in resp.text
+    assert "$0.2000" in resp.text
