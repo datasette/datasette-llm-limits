@@ -1,6 +1,6 @@
 [project]
 name = "datasette-llm-limits"
-version = "0.1a1"
+version = "0.1a2"
 description = "Plugin for configuring periodic limits on LLM usage in Datasette"
 readme = "README.md"
 authors = [{name = "Datasette"}]
