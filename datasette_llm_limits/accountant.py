@@ -134,7 +134,12 @@ class LimitsAccountant(Accountant):
                 conn.execute("ROLLBACK")
                 raise
 
-        await self.datasette.get_internal_database().execute_write_fn(_check_and_insert)
+        # _check_and_insert manages its own IMMEDIATE transaction so the limit
+        # check and reservation insert are atomic. Disable Datasette's outer
+        # transaction to avoid nesting BEGIN IMMEDIATE on Datasette 1.0a37+.
+        await self.datasette.get_internal_database().execute_write_fn(
+            _check_and_insert, transaction=False
+        )
         return Tx(new_id)
 
     async def settle(

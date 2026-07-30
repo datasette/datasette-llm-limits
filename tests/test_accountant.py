@@ -32,6 +32,30 @@ async def test_reserve_returns_tx_and_inserts_row(make_datasette):
 
 
 @pytest.mark.asyncio
+async def test_reserve_disables_datasette_outer_transaction(
+    make_datasette, monkeypatch
+):
+    datasette, accountant = await make_datasette(
+        limits={
+            "daily": {"scope": "actor", "window": "rolling-24h", "amount_usd": 1.00}
+        }
+    )
+    internal = datasette.get_internal_database()
+    original_execute_write_fn = internal.execute_write_fn
+    transaction_options = []
+
+    async def execute_write_fn(fn, *args, **kwargs):
+        transaction_options.append(kwargs.get("transaction"))
+        return await original_execute_write_fn(fn, *args, **kwargs)
+
+    monkeypatch.setattr(internal, "execute_write_fn", execute_write_fn)
+
+    await accountant.reserve(usd(0.10), actor_id="alice")
+
+    assert transaction_options == [False]
+
+
+@pytest.mark.asyncio
 async def test_reserve_over_cap_raises_insufficient_balance(make_datasette):
     _, accountant = await make_datasette(
         limits={
